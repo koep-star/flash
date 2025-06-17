@@ -105,12 +105,46 @@ def study_page(app):
     
     st.info(f"Available cards: {len(available_cards)} out of {len(app.flashcards)} total")
     
-    # Initialize session state for current card
-    if 'current_card_index' not in st.session_state:
+    # Random mode toggle
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        random_mode = st.checkbox("🎲 Random Order", value=True, key="random_mode")
+    with col2:
+        if st.button("🔄 Refresh Cards"):
+            # Reset study session to pick up new cards
+            if 'current_card_index' in st.session_state:
+                del st.session_state.current_card_index
+            if 'available_indices' in st.session_state:
+                del st.session_state.available_indices
+            if 'show_answer' in st.session_state:
+                del st.session_state.show_answer
+            st.rerun()
+    
+    # Initialize or refresh session state for current card
+    if ('current_card_index' not in st.session_state or 
+        'available_indices' not in st.session_state or 
+        len(st.session_state.available_indices) != len(available_cards)):
+        
         st.session_state.current_card_index = 0
         st.session_state.show_answer = False
         st.session_state.available_indices = [idx for idx, _ in available_cards]
-        random.shuffle(st.session_state.available_indices)
+        
+        if random_mode:
+            random.shuffle(st.session_state.available_indices)
+    
+    # Handle random mode toggle
+    if 'last_random_mode' not in st.session_state:
+        st.session_state.last_random_mode = random_mode
+    
+    if st.session_state.last_random_mode != random_mode:
+        # Mode changed, reshuffle or sort cards
+        if random_mode:
+            random.shuffle(st.session_state.available_indices)
+        else:
+            st.session_state.available_indices.sort()
+        st.session_state.last_random_mode = random_mode
+        st.session_state.current_card_index = 0
+        st.session_state.show_answer = False
     
     # Get current card
     if st.session_state.current_card_index < len(st.session_state.available_indices):
@@ -189,8 +223,17 @@ def reset_study_session():
     """Reset study session"""
     st.session_state.current_card_index = 0
     st.session_state.show_answer = False
-    if 'available_indices' in st.session_state:
+    # Refresh available cards to pick up any new ones
+    app = st.session_state.app
+    available_cards = app.get_available_cards()
+    st.session_state.available_indices = [idx for idx, _ in available_cards]
+    
+    # Apply current random mode setting
+    if st.session_state.get('random_mode', True):
         random.shuffle(st.session_state.available_indices)
+    else:
+        st.session_state.available_indices.sort()
+    
     st.rerun()
 
 def manage_cards_page(app):
@@ -228,7 +271,8 @@ def manage_cards_page(app):
                     
                     app.flashcards.append(new_card)
                     app.save_data()
-                    st.success("Card added successfully!")
+                    st.success(f"✅ Card added successfully! You now have {len(app.flashcards)} cards total.")
+                    st.balloons()  # Fun celebration animation
                     st.rerun()
                 else:
                     st.error("Please fill in both question and answer!")
@@ -291,7 +335,17 @@ def manage_cards_page(app):
                             app.flashcards.append(new_card)
                         
                         app.save_data()
-                        st.success(f"Imported {len(df)} cards successfully!")
+                        st.success(f"✅ Imported {len(df)} cards successfully! You now have {len(app.flashcards)} cards total.")
+                        st.balloons()
+                        
+                        # Clear study session to pick up new cards
+                        if 'current_card_index' in st.session_state:
+                            del st.session_state.current_card_index
+                        if 'available_indices' in st.session_state:
+                            del st.session_state.available_indices
+                        if 'show_answer' in st.session_state:
+                            del st.session_state.show_answer
+                        
                         st.rerun()
                 else:
                     st.error("CSV must contain 'question' and 'answer' columns!")
